@@ -31,7 +31,7 @@ input (Default:phrases.txt)<br>
 output (Default:bingo.txt)<br>
 
 Usage<br>
-.\odelbrain.exe -wallet="wallets.txt" -walletinsert=true  -phrasecount=12 input="phrases.txt" output="bingo.txt"
+.\odelbrain.exe -wallet="wallets.txt" -walletinsert=true  -phrasecount=12 -input="phrases.txt" -output="bingo.txt" -thread=4
 
 
 
