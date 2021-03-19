@@ -39,7 +39,7 @@ var sqliteDatabase *sql.DB
 var walletList_opt *string = flag.String("wallet", "wallets.txt", "wallets.txt")
 var walletInsert_opt *bool = flag.Bool("walletinsert", false, "true")
 var phraseCount_opt *int = flag.Int("phrasecount", 12, "12")
-var input_opt *string = flag.String("intput", "phrases.txt", "phrases.txt")
+var input_opt *string = flag.String("input", "phrases.txt", "phrases.txt")
 var output_opt *string = flag.String("output", "bingo.txt", "bingo.txt")
 
 func main() {
