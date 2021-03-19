@@ -1,4 +1,4 @@
-# odelbrain
+# ODELBrain
 
 
 This project is a brute force application written in GO scripting language using BrainWallet wallets mnemonic.<br>
