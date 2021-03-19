@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gosuri/uilive"
@@ -32,6 +33,8 @@ type Wallet struct {
 	passphrase           string
 }
 
+var botStartElapsed time.Time
+var start time.Time
 var writer *uilive.Writer
 var total uint64 = 0
 var totalFound int = 0
@@ -41,6 +44,7 @@ var walletInsert_opt *bool = flag.Bool("walletinsert", false, "true")
 var phraseCount_opt *int = flag.Int("phrasecount", 12, "12")
 var input_opt *string = flag.String("input", "phrases.txt", "phrases.txt")
 var output_opt *string = flag.String("output", "bingo.txt", "bingo.txt")
+var thread_opt *int = flag.Int("thread", 1, "1")
 
 func main() {
 	flag.Parse()
@@ -49,6 +53,7 @@ func main() {
 	fmt.Println("Phrase Count:", *phraseCount_opt)
 	fmt.Println("Input:", *input_opt)
 	fmt.Println("Output:", *output_opt)
+	fmt.Println("Thread:", *thread_opt)
 
 	wordListRead, _ := ioutil.ReadFile(*input_opt)
 	bytesRead, _ := ioutil.ReadFile(*walletList_opt)
@@ -61,8 +66,8 @@ func main() {
 		createDB()
 	}
 
-	sqliteDatabase, _ := sql.Open("sqlite3", "database.db") // Open the created SQLite File
-	defer sqliteDatabase.Close()                            // Defer Closing the database
+	sqliteDatabase, _ = sql.Open("sqlite3", "database.db") // Open the created SQLite File
+	defer sqliteDatabase.Close()                           // Defer Closing the database
 
 	if *walletInsert_opt {
 		createTable(sqliteDatabase) // Create Database Tables
@@ -86,28 +91,42 @@ func main() {
 	}
 
 	fmt.Println("Bot Started")
-	// start listening for updates and render
 
 	go Counter()
 
-	for {
-		randomPhrase := RandomPhrase(*phraseCount_opt)
-		randomWallet := Generator(randomPhrase)
-		if CheckWallet(sqliteDatabase, randomWallet.RIPEM160) {
+	var wg sync.WaitGroup
+	for i := 1; i <= *thread_opt; i++ {
+		wg.Add(1)
+		go Brute(i, &wg)
+	}
+	wg.Wait()
+}
+
+func init() {
+	botStartElapsed = time.Now()
+}
+
+func Brute(id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for { ////Elapsed Time 0.0010003
+		randomPhrase := RandomPhrase(*phraseCount_opt)          //Elapsed Time 0.000999
+		randomWallet := Generator(randomPhrase)                 //Elapsed Time 0.0010002
+		if CheckWallet(sqliteDatabase, randomWallet.RIPEM160) { //Elapsed Time 0.0010004
 			totalFound++
 			SaveWallet(randomWallet)
 			fmt.Println("Bingo:" + randomPhrase)
 		}
 		total++
 	}
+
 }
 
 func Counter() {
 	writer = uilive.New()
 	writer.Start()
 	for {
-		fmt.Fprintf(writer, "[Total Generated %d] Found: %d\n", total, totalFound)
-		time.Sleep(time.Millisecond * 20000)
+		fmt.Fprintf(writer, "Thread Count = %v\nElapsed Time = %v\nGenerated Wallet = %d\nGenerate Speed Avg(s) = %v\nFound = %d\n", *thread_opt, time.Since(botStartElapsed).String(), total, (total / uint64(time.Since(botStartElapsed).Seconds())), totalFound)
+		time.Sleep(time.Millisecond * 1000)
 	}
 	//writer.Stop() // flush and stop rendering
 }
@@ -159,8 +178,6 @@ func CheckWallet(db *sql.DB, hash string) bool {
 	err := db.QueryRow(sqlStmt, hash).Scan(&hash)
 	if err != nil {
 		if err != sql.ErrNoRows {
-			// a real error happened! you should change your function return
-			// to "(bool, error)" and return "false, err" here
 			log.Print(err)
 		}
 		return false
