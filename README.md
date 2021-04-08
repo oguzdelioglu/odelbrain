@@ -5,11 +5,7 @@ This project is a brute force application written in GO scripting language using
 It was inspired by a similar project BrainFlayer and adapted to the GO language.<br>
 Of course it is not similar in every sense.<br>
 The project needs to be optimized.<br>
-Sqlite was used instead of BloomFilter.<br>
-Wallet addresses are converted to RIPEM160 and stored in the database.<br>
-The reason I didn't use BloomFilter was that it was not accurate enough in brute force tests for 25 million wallets.<br>
-If there are friends who know how to code, they can solve this problem in GO language and use BloomFilter for this project again.<br>
-Perhaps there is another quicker method of interrogation that I do not know about.<br>
+Added BloomFilter.<br>
 
 Required modules<br>
 go get "github.com/gosuri/uilive"<br>
