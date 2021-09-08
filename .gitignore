@@ -1,14 +1,4 @@
 /.vscode
 /database.db
-/hash160.txt
-/hash160ydk.txt
-/odelbrain.exe
-/phrases - Kopya.txt
-/phrases3.txt
-/phrases1.txt
-/wallets.txt
-/wallets2.txt
-/wordlist.txt
-/soncuzdanlar.txt
-/sadecebrainler.txt
-/bingo.txt
+/main.exe
+/*.txt

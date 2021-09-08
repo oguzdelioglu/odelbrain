@@ -77,7 +77,7 @@ func main() {
 	for _, address := range addressList {
 		sbf.Add([]byte(address))
 	}
-	fmt.Println("Wallets Loaded")
+	fmt.Println("Wallets Loaded") //Loaded
 
 	// if sbf.Test([]byte(AddressToRIPEM160(`15Jp2rPA5zbEZV4rwCSLufreJWyJUfyA58`))) {
 	// 	fmt.Println("contains b")
