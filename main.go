@@ -20,7 +20,9 @@ import (
 	"github.com/gosuri/uilive"
 	"github.com/haltingstate/secp256k1-go"
 	"github.com/jbenet/go-base58"
-	boom "github.com/tylertreat/BoomFilters"
+
+	//boom "github.com/tylertreat/BoomFilters"
+	boom "github.com/bits-and-blooms/bloom/v3"
 	"golang.org/x/crypto/ripemd160"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -40,7 +42,7 @@ var botStartElapsed time.Time
 //var start time.Time
 var writer *uilive.Writer
 var total uint64 = 0
-var totalFound int = 0
+var totalFound uint64 = 0
 
 //var sqliteDatabase *sql.DB
 var walletList_opt *string = flag.String("wallet", "wallets.txt", "wallets.txt")
@@ -63,16 +65,19 @@ func main() {
 	wordListRead, _ := ioutil.ReadFile(*input_opt)
 	bytesRead, _ := ioutil.ReadFile(*walletList_opt)
 	file_content := string(bytesRead)
-	addressList = strings.Split(file_content, "\n")
+	addressList = strings.Split(strings.Replace(file_content, "\r\n", "\n", -1), "\n")
 	file_content = string(wordListRead)
-	wordList = strings.Split(file_content, "\n")
-
+	wordList = strings.Split(strings.Replace(file_content, "\r\n", "\n", -1), "\n")
+	//fmt.Println(wordList)
+	//fmt.Println(addressList)
 	addressCount := len(addressList)
-	sbf = boom.NewBloomFilter(uint(addressCount), 0.00000000000000000001)
+	fmt.Println("Total Wallet:", uint(addressCount))
+	sbf = boom.NewWithEstimates(uint(addressCount), 0.01) //0.00000000000000000001
 
 	for _, address := range addressList {
 		sbf.Add([]byte(address))
 	}
+	fmt.Println("Wallets Loaded")
 
 	// if sbf.Test([]byte(AddressToRIPEM160(`15Jp2rPA5zbEZV4rwCSLufreJWyJUfyA58`))) {
 	// 	fmt.Println("contains b")
@@ -140,6 +145,18 @@ func init() {
 	botStartElapsed = time.Now()
 }
 
+func Counter() {
+	writer = uilive.New()
+	writer.Start()
+	time.Sleep(time.Millisecond * 1000) //
+	for {
+		avgSpeed := total / uint64(time.Since(botStartElapsed).Seconds())
+		fmt.Fprintf(writer, "Thread Count = %v\nElapsed Time = %v\nGenerated Wallet = %d\nGenerate Speed Avg(s) = %v\nFound = %d\nFor Close ctrl+c\n", *thread_opt, time.Since(botStartElapsed).String(), total, avgSpeed, totalFound)
+		time.Sleep(time.Millisecond * 1000)
+	}
+	//writer.Stop() // flush and stop rendering
+}
+
 func Brute(id int, wg *sync.WaitGroup) {
 	//fmt.Println(id)
 	defer wg.Done()
@@ -150,7 +167,7 @@ func Brute(id int, wg *sync.WaitGroup) {
 		//fmt.Println(randomWallet.base58BitcoinAddress)
 		if sbf.Test([]byte(randomWallet.base58BitcoinAddress)) {
 			SaveWallet(randomWallet)
-			fmt.Println("Bingo:" + randomPhrase)
+			//fmt.Println("Bingo:" + randomPhrase)
 			totalFound++
 		}
 		total++
@@ -205,16 +222,6 @@ func GeneratorFull(passphrase string) Wallet {
 	bigintBitcoinAddress, _ := new(big.Int).SetString((hexBitcoinAddress), 16) // Base58Encode the Address
 	base58BitcoinAddress := base58.Encode(bigintBitcoinAddress.Bytes())
 	return Wallet{base58BitcoinAddress: "1" + base58BitcoinAddress, RIPEM160: versionripeNormal, privateKey: privateKey, passphrase: passphrase} // Send line to output channel
-}
-
-func Counter() {
-	writer = uilive.New()
-	writer.Start()
-	for {
-		fmt.Fprintf(writer, "Thread Count = %v\nElapsed Time = %v\nGenerated Wallet = %d\nGenerate Speed Avg(s) = %v\nFound = %d\nFor Close ctrl+c\n", *thread_opt, time.Since(botStartElapsed).String(), total, (total / uint64(time.Since(botStartElapsed).Seconds())), totalFound)
-		time.Sleep(time.Millisecond * 1000)
-	}
-	//writer.Stop() // flush and stop rendering
 }
 
 // func Generator(passphrase string) Wallet {
