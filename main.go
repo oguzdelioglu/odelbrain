@@ -148,11 +148,11 @@ func init() {
 func Counter() {
 	writer = uilive.New()
 	writer.Start()
-	time.Sleep(time.Millisecond * 1000) //1 Second
+	time.Sleep(time.Millisecond * 1000) //1
 	for {
 		avgSpeed := total / uint64(time.Since(botStartElapsed).Seconds())
 		fmt.Fprintf(writer, "Thread Count = %v\nElapsed Time = %v\nGenerated Wallet = %d\nGenerate Speed Avg(s) = %v\nFound = %d\nFor Close ctrl+c\n", *thread_opt, time.Since(botStartElapsed).String(), total, avgSpeed, totalFound)
-		time.Sleep(time.Millisecond * 1000) //1 Second
+		time.Sleep(time.Millisecond * 1000) //1
 	}
 	//writer.Stop() // flush and stop rendering
 }
