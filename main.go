@@ -84,7 +84,7 @@ func main() {
 	// }
 
 	// if *walletInsert_opt {
-	// 	createDB()
+	// 	createDB()g
 	// }
 	// sqliteDatabase, _ = sql.Open("sqlite3", "database.db") // Open the created SQLite File
 	// defer sqliteDatabase.Close()                           // Defer Closing the database
