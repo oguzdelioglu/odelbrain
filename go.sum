@@ -1,3 +1,7 @@
+github.com/KeisukeYamashita/go-btcrpc v0.0.0-20180401202344-3c1fdf441186 h1:I6OBLRtk17pDuidUsFfEKta0e/Mu4/lQRMWKLK+BBJU=
+github.com/KeisukeYamashita/go-btcrpc v0.0.0-20180401202344-3c1fdf441186/go.mod h1:s1YhG/xoCd8oncBuZ7/XRvKOQOb4RNCb3LhbBmzPC2E=
+github.com/KeisukeYamashita/go-jsonrpc v1.0.1 h1:mkg8th2I7C1y3tnAsxroQbmQcXEZ22AkQ5pazRd/KDM=
+github.com/KeisukeYamashita/go-jsonrpc v1.0.1/go.mod h1:NyiYd1oDwaSsIflCju5dKRvLdG5rZ/I4E07ygRYYmgc=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/bits-and-blooms/bitset v1.2.0 h1:Kn4yilvwNtMACtf1eYDlG8H77R07mZSPbMjLyS07ChA=
 github.com/bits-and-blooms/bitset v1.2.0/go.mod h1:gIdJ4wp64HaoK2YrL1Q5/N7Y16edYb8uY+O0FJTyyDA=

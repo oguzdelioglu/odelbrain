@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"hash"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"math/big"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -23,6 +25,7 @@ import (
 
 	//boom "github.com/tylertreat/BoomFilters"
 	boom "github.com/bits-and-blooms/bloom/v3"
+	//rpcclient "github.com/stevenroose/go-bitcoin-core-rpc"
 	"golang.org/x/crypto/ripemd160"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -43,6 +46,8 @@ var botStartElapsed time.Time
 var writer *uilive.Writer
 var total uint64 = 0
 var totalFound uint64 = 0
+var totalBalancedAddress uint64 = 0
+var BalanceAPI string = "https://sochain.com/api/v2/get_address_balance/bitcoin/"
 
 //var sqliteDatabase *sql.DB
 var walletList_opt *string = flag.String("wallet", "wallets.txt", "wallets.txt")
@@ -55,6 +60,37 @@ var thread_opt *int = flag.Int("thread", 8, "1")
 var sbf *boom.BloomFilter
 
 func main() {
+
+	// checkBalance("1zzwt2xyWHH9J8f3kZBkWh6JGEXJNRzrW")
+	// os.Exit(0)
+	// // Connect to local bitcoin core RPC server using HTTP POST mode.
+	// connCfg := &rpcclient.ConnConfig{
+	// 	Host: "localhost:8332",
+	// 	User: "holyturk",
+	// 	Pass: "s4n4n3",
+	// }
+	// // Notice the notification parameter is nil since notifications are
+	// // not supported in HTTP POST mode.
+	// client, err := rpcclient.New(connCfg)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer client.Shutdown()
+
+	// // Get the current block count.
+	// blockCount, err := client.GetBlockCount()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// log.Printf("Block count: %d", blockCount)
+
+	// Get the current block count.
+	// transaction, err := client.GetReceivedByAddress("11124rqXGtrY2T9qsMNUYRAWZGa58pBfRw")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// log.Printf("Block count: %d", transaction)
+
 	flag.Parse()
 	fmt.Println("Wallet:", *walletList_opt)
 	fmt.Println("Wallet Insert:", *walletInsert_opt)
@@ -72,7 +108,7 @@ func main() {
 	//fmt.Println(addressList)
 	addressCount := len(addressList)
 	fmt.Println("Total Wallet:", uint(addressCount))
-	sbf = boom.NewWithEstimates(uint(addressCount), 0.01) //0.00000000000000000001
+	sbf = boom.NewWithEstimates(uint(addressCount), 0.0000001) //0.00000000000000000001  0.0000001
 
 	for _, address := range addressList {
 		sbf.Add([]byte(address))
@@ -151,7 +187,7 @@ func Counter() {
 	time.Sleep(time.Millisecond * 1000) //1 Second
 	for {
 		avgSpeed := total / uint64(time.Since(botStartElapsed).Seconds())
-		fmt.Fprintf(writer, "Thread Count = %v\nElapsed Time = %v\nGenerated Wallet = %d\nGenerate Speed Avg(s) = %v\nFound = %d\nFor Close ctrl+c\n", *thread_opt, time.Since(botStartElapsed).String(), total, avgSpeed, totalFound)
+		fmt.Fprintf(writer, "Thread Count = %v\nElapsed Time = %v\nGenerated Wallet = %d\nGenerate Speed Avg(s) = %v\nFound = %d\nTotal Balanced Address = %d\nFor Close ctrl+c\n", *thread_opt, time.Since(botStartElapsed).String(), total, avgSpeed, totalFound, totalBalancedAddress)
 		time.Sleep(time.Millisecond * 1000) //1 Second
 	}
 	//writer.Stop() // flush and stop rendering
@@ -167,10 +203,45 @@ func Brute(id int, wg *sync.WaitGroup) {
 		//fmt.Println(randomWallet.base58BitcoinAddress)
 		if sbf.Test([]byte(randomWallet.base58BitcoinAddress)) {
 			SaveWallet(randomWallet)
+			checkBalance(randomWallet.base58BitcoinAddress)
 			//fmt.Println("Bingo:" + randomPhrase)
 			totalFound++
 		}
 		total++
+	}
+}
+
+func checkBalance(wallet string) string {
+	resp, err := http.Get(BalanceAPI + wallet)
+	if err != nil {
+		fmt.Println(err)
+		return "0.00000000"
+	}
+	var generic map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&generic)
+	if err != nil {
+		fmt.Println(err)
+		return "0.00000000"
+	} else {
+		if generic["data"] != nil {
+			balance := fmt.Sprint(generic["data"].(map[string]interface{})["confirmed_balance"])
+			if balance != "0.00000000" && balance != "<nil>" {
+				totalBalancedAddress++
+				f, err := os.OpenFile("balance_wallets.txt",
+					os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					fmt.Println(err)
+				}
+				defer f.Close()
+
+				if _, err := f.WriteString(wallet + ":" + balance + "\n"); err != nil {
+					fmt.Println(err)
+				}
+			}
+			return balance
+		} else {
+			return "0.00000000"
+		}
 	}
 }
 

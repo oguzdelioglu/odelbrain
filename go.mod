@@ -3,6 +3,8 @@ module odelbrain
 go 1.17
 
 require (
+	github.com/KeisukeYamashita/go-btcrpc v0.0.0-20180401202344-3c1fdf441186 // indirect
+	github.com/KeisukeYamashita/go-jsonrpc v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.2.0 // indirect
 	github.com/bits-and-blooms/bloom/v3 v3.0.1 // indirect
 	github.com/blockcypher/gobcy v2.0.1+incompatible // indirect
