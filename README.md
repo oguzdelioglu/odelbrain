@@ -6,6 +6,7 @@ It was inspired by a similar project BrainFlayer and adapted to the GO language.
 Of course it is not similar in every sense.<br>
 The project needs to be optimized.<br>
 Added BloomFilter.<br>
+Check Address balance (Because bloom filter giving false positive address sometimes.We need recheck address.)
 
 Required modules<br>
 go get "github.com/gosuri/uilive"<br>
@@ -13,6 +14,7 @@ go get "github.com/haltingstate/secp256k1-go"<br>
 go get "github.com/jbenet/go-base58"<br>
 go get "golang.org/x/crypto/ripemd160"<br>
 go get "github.com/mattn/go-sqlite3"<br>
+go get "github.com/bits-and-blooms/bloom/v3"<br>
 
 
 Build process<br>
