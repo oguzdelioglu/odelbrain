@@ -48,7 +48,7 @@ var writer *uilive.Writer
 var total uint64 = 0
 var totalFound uint64 = 0
 var totalBalancedAddress uint64 = 0
-var BalanceAPI string = "https://sochain.com/api/v2/get_address_balance/bitcoin/"
+var BalanceAPI string = "https://sochain.com/api/v2/get_address_balance/bitcoin/" //API
 
 //var sqliteDatabase *sql.DB
 var walletList_opt *string = flag.String("wallet", "wallets.txt", "wallets.txt")
