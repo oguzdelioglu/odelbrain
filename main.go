@@ -33,6 +33,16 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+var walletList_opt *string = flag.String("w", "wallets.txt", "wallets.txt")
+var walletInsert_opt *bool = flag.Bool("wi", false, "true")
+var phraseCount_opt *int = flag.Int("pc", 12, "12")
+var input_opt *string = flag.String("i", "phrases.txt", "phrases.txt")
+var output_opt *string = flag.String("o", "bingo.txt", "bingo.txt")
+var thread_opt *int = flag.Int("t", 1, "1")
+var nospace_opt *bool = flag.Bool("s", false, "false")
+var firstupper_opt *bool = flag.Bool("u", false, "false")
+var verbose_opt *bool = flag.Bool("v", false, "false")
+
 var addressList, wordList []string
 
 type Wallet struct {
@@ -51,12 +61,6 @@ var totalBalancedAddress uint64 = 0
 var BalanceAPI string = "https://sochain.com/api/v2/get_address_balance/bitcoin/" //API
 
 //var sqliteDatabase *sql.DB
-var walletList_opt *string = flag.String("wallet", "wallets.txt", "wallets.txt")
-var walletInsert_opt *bool = flag.Bool("walletinsert", false, "true")
-var phraseCount_opt *int = flag.Int("phrasecount", 12, "12")
-var input_opt *string = flag.String("input", "phrases.txt", "phrases.txt")
-var output_opt *string = flag.String("output", "bingo.txt", "bingo.txt")
-var thread_opt *int = flag.Int("thread", 1, "1")
 
 var sbf *boom.BloomFilter
 
@@ -93,14 +97,18 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 	// log.Printf("Block count: %d", transaction)
-
 	flag.Parse()
+
 	fmt.Println("Wallet:", *walletList_opt)
 	fmt.Println("Wallet Insert:", *walletInsert_opt)
 	fmt.Println("Phrase Count:", *phraseCount_opt)
 	fmt.Println("Input:", *input_opt)
 	fmt.Println("Output:", *output_opt)
 	fmt.Println("Thread:", *thread_opt)
+	fmt.Println("Upper:", *firstupper_opt)
+	fmt.Println("No Space:", *nospace_opt)
+	fmt.Println("Verbose Generator:", *verbose_opt)
+
 	wordListRead, _ := ioutil.ReadFile(*input_opt)
 	bytesRead, _ := ioutil.ReadFile(*walletList_opt)
 	file_content := string(bytesRead)
@@ -201,18 +209,27 @@ func Brute(id int, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for { ////Elapsed Time 0.0010003
 		randomPhrase := RandomPhrase(*phraseCount_opt) //Elapsed Time 0.000999
-		//fmt.Println(randomPhrase)
+
+		if *verbose_opt {
+			fmt.Println(randomPhrase)
+		}
+
 		randomWallet := GeneratorFull(randomPhrase) //Elapsed Time 0.0010002
 		//fmt.Println(randomWallet.base58BitcoinAddress)
 		if sbf.Test([]byte(randomWallet.addressUncompressed)) {
-			SaveWallet(randomWallet)
-			checkBalance(randomWallet.addressUncompressed)
+			SaveWallet(randomWallet, *output_opt)
+			if checkBalance(randomWallet.addressUncompressed) != "0.00000000" {
+				SaveWallet(randomWallet, "balance_wallets.txt")
+			}
+
 			//fmt.Println("Bingo:" + randomPhrase)
 			totalFound++
 		}
 		if sbf.Test([]byte(randomWallet.addressCompressed)) {
-			SaveWallet(randomWallet)
-			checkBalance(randomWallet.addressCompressed)
+			SaveWallet(randomWallet, *output_opt)
+			if checkBalance(randomWallet.addressCompressed) != "0.00000000" {
+				SaveWallet(randomWallet, "balance_wallets.txt")
+			}
 			//fmt.Println("Bingo:" + randomPhrase)
 			totalFound++
 		}
@@ -236,18 +253,10 @@ func checkBalance(wallet string) string {
 			balance := fmt.Sprint(generic["data"].(map[string]interface{})["confirmed_balance"])
 			if balance != "0.00000000" && balance != "<nil>" {
 				totalBalancedAddress++
-				f, err := os.OpenFile("balance_wallets.txt",
-					os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-				if err != nil {
-					fmt.Println(err)
-				}
-				defer f.Close()
-
-				if _, err := f.WriteString(wallet + ":" + balance + "\n"); err != nil {
-					fmt.Println(err)
-				}
+				return balance
+			} else {
+				return balance
 			}
-			return balance
 		} else {
 			return "0.00000000"
 		}
@@ -366,9 +375,9 @@ func AddressToRIPEM160(address string) string {
 	return hex.EncodeToString(hash)[2:]
 }
 
-func SaveWallet(walletInfo Wallet) {
+func SaveWallet(walletInfo Wallet, path string) {
 	fullWallet := GeneratorFull(walletInfo.passphrase)
-	f, err := os.OpenFile(*output_opt,
+	f, err := os.OpenFile(path,
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Println(err)
@@ -493,8 +502,18 @@ func RandomPhrase(length int) string {
 	for i := 0; i < length; i++ {
 		phrase = append(phrase, wordList[rand.Intn(len(wordList))])
 	}
+
+	if *firstupper_opt { //First Character Upper
+		for i, _ := range phrase {
+			phrase[i] = strings.Title(phrase[i])
+		}
+	}
 	//lastString := strings.Join(phrase, " ")
-	return strings.Join(phrase, " ")
+	if !*nospace_opt {
+		return strings.Join(phrase, " ")
+	} else {
+		return strings.Join(phrase, "")
+	}
 }
 
 // SHA256 Hasher function
