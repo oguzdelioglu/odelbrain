@@ -9,7 +9,6 @@ import (
 	"hash"
 	"io/ioutil"
 	"log"
-	"math/big"
 	"math/rand"
 	"net/http"
 	"os"
@@ -19,11 +18,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcutil"
 	"github.com/gosuri/uilive"
-	"github.com/haltingstate/secp256k1-go"
 	"github.com/jbenet/go-base58"
 
 	//boom "github.com/tylertreat/BoomFilters"
+
 	boom "github.com/bits-and-blooms/bloom/v3"
 	//rpcclient "github.com/stevenroose/go-bitcoin-core-rpc"
 	"golang.org/x/crypto/ripemd160"
@@ -34,10 +36,9 @@ import (
 var addressList, wordList []string
 
 type Wallet struct {
-	base58BitcoinAddress string
-	RIPEM160             string
-	privateKey           string
-	passphrase           string
+	addressCompressed   string
+	addressUncompressed string
+	passphrase          string
 }
 
 var botStartElapsed time.Time
@@ -55,12 +56,14 @@ var walletInsert_opt *bool = flag.Bool("walletinsert", false, "true")
 var phraseCount_opt *int = flag.Int("phrasecount", 12, "12")
 var input_opt *string = flag.String("input", "phrases.txt", "phrases.txt")
 var output_opt *string = flag.String("output", "bingo.txt", "bingo.txt")
-var thread_opt *int = flag.Int("thread", 8, "1")
+var thread_opt *int = flag.Int("thread", 1, "1")
 
 var sbf *boom.BloomFilter
 
 func main() {
-
+	//result := GeneratorFull("creature change worship guilty middle kingdom bid silver game time choke said")
+	//fmt.Println(result.addressCompressed, result.addressUncompressed, result.passphrase)
+	//os.Exit(0)
 	// checkBalance("1zzwt2xyWHH9J8f3kZBkWh6JGEXJNRzrW")
 	// os.Exit(0)
 	// // Connect to local bitcoin core RPC server using HTTP POST mode.
@@ -201,9 +204,15 @@ func Brute(id int, wg *sync.WaitGroup) {
 		//fmt.Println(randomPhrase)
 		randomWallet := GeneratorFull(randomPhrase) //Elapsed Time 0.0010002
 		//fmt.Println(randomWallet.base58BitcoinAddress)
-		if sbf.Test([]byte(randomWallet.base58BitcoinAddress)) {
+		if sbf.Test([]byte(randomWallet.addressUncompressed)) {
 			SaveWallet(randomWallet)
-			checkBalance(randomWallet.base58BitcoinAddress)
+			checkBalance(randomWallet.addressUncompressed)
+			//fmt.Println("Bingo:" + randomPhrase)
+			totalFound++
+		}
+		if sbf.Test([]byte(randomWallet.addressCompressed)) {
+			SaveWallet(randomWallet)
+			checkBalance(randomWallet.addressCompressed)
 			//fmt.Println("Bingo:" + randomPhrase)
 			totalFound++
 		}
@@ -261,38 +270,69 @@ func checkBalance(wallet string) string {
 
 // }
 
-func Generator(passphrase string) Wallet {
-	hasher := sha256.New() // SHA256
-	sha := SHA256(hasher, []byte(passphrase))
-	publicKeyBytes := secp256k1.UncompressedPubkeyFromSeckey(sha) // ECDSA
-	sha = SHA256(hasher, publicKeyBytes)                          // SHA256
-	ripe := RIPEMD160(sha)                                        // RIPEMD160
-	versionripeNormal := hex.EncodeToString(ripe)
-	return Wallet{RIPEM160: versionripeNormal, passphrase: passphrase} // Send line to output channel
-}
+// func Generator(passphrase string) Wallet {
+// 	hasher := sha256.New() // SHA256
+// 	sha := SHA256(hasher, []byte(passphrase))
+// 	publicKeyBytes := secp256k1.UncompressedPubkeyFromSeckey(sha) // ECDSA
+// 	sha = SHA256(hasher, publicKeyBytes)                          // SHA256
+// 	ripe := RIPEMD160(sha)                                        // RIPEMD160
+// 	versionripeNormal := hex.EncodeToString(ripe)
+// 	return Wallet{RIPEM160: versionripeNormal, passphrase: passphrase} // Send line to output channel
+// }
+
+// func GeneratorBtcKey(passphrase string) Wallet {
+
+// }
 
 func GeneratorFull(passphrase string) Wallet {
+	//fmt.Println("_________________________")
+	//fmt.Println("passphrase:", passphrase)
 	hasher := sha256.New() // SHA256
 	sha := SHA256(hasher, []byte(passphrase))
+	//fmt.Println("SHA:", sha)
 
-	publicKeyBytes := secp256k1.UncompressedPubkeyFromSeckey(sha) // ECDSA
-	privateKey := hex.EncodeToString(sha)                         // Store Private Key
+	// Get public key
+	//_, public := btcec.PrivKeyFromBytes(btcec.S256(), sha)
+	_, public := btcec.PrivKeyFromBytes(btcec.S256(), sha)
 
-	sha = SHA256(hasher, publicKeyBytes) // SHA256
-	ripe := RIPEMD160(sha)               // RIPEMD160
+	// Get compressed and uncompressed addresses
+	caddr, _ := btcutil.NewAddressPubKey(public.SerializeCompressed(), &chaincfg.MainNetParams)
+	uaddr, _ := btcutil.NewAddressPubKey(public.SerializeUncompressed(), &chaincfg.MainNetParams)
+	//fmt.Println(caddr.EncodeAddress())
+	//fmt.Println(uaddr.EncodeAddress())
+	// Print keys
+	// fmt.Printf("%s %x Compressed\n", caddr.EncodeAddress(), sha)
+	// fmt.Printf("%s %x Uncompressed\n", uaddr.EncodeAddress(), sha)
 
-	versionripeNormal := hex.EncodeToString(ripe) // Add version byte 0x00
-	versionripe := "00" + versionripeNormal       // Add version byte 0x00
-	decoded, _ := hex.DecodeString(versionripe)
+	// publicKeyBytes := secp256k1.UncompressedPubkeyFromSeckey(sha) // ECDSA
+	// //compressedpublicKeyBytes := secp256k1.PubkeyFromSeckey(sha)   // ECDSA
+	// fmt.Println("publicKeyBytes:", publicKeyBytes)
+	// //fmt.Println("CompressedpublicKeyBytes:", compressedpublicKeyBytes)
+	// privateKey := hex.EncodeToString(sha) // Store Private Key  B58Check ile geçirildiğinde 5 ile başlayan private key olacak
+	// fmt.Println("privateKey:", privateKey)
 
-	sha = SHA256(hasher, SHA256(hasher, decoded)) // SHA256x2
+	// sha = SHA256(hasher, publicKeyBytes) // SHA256
+	// fmt.Println("sha:", sha)
+	// ripe := RIPEMD160(sha) // RIPEMD160
+	// fmt.Println("ripe:", ripe)
+	// versionripeNormal := hex.EncodeToString(ripe) // Add version byte 0x00
+	// fmt.Println("versionripeNormal:", versionripeNormal)
+	// versionripe := "00" + versionripeNormal // Add version byte 0x00
+	// fmt.Println("versionripe:", versionripe)
+	// decoded, _ := hex.DecodeString(versionripe)
+	// fmt.Println("decoded:", decoded)
+	// sha = SHA256(hasher, SHA256(hasher, decoded)) // SHA256x2
+	// fmt.Println("sha:", sha)
+	// addressChecksum := hex.EncodeToString(sha)[0:8] // Concencate Address Checksum and Extended RIPEMD160 Hash
+	// fmt.Println("addressChecksum:", addressChecksum)
+	// hexBitcoinAddress := versionripe + addressChecksum
+	// fmt.Println("hexBitcoinAddress:", hexBitcoinAddress)
+	// bigintBitcoinAddress, _ := new(big.Int).SetString((hexBitcoinAddress), 16) // Base58Encode the Address
+	// fmt.Println("bigintBitcoinAddress:", bigintBitcoinAddress)
 
-	addressChecksum := hex.EncodeToString(sha)[0:8] // Concencate Address Checksum and Extended RIPEMD160 Hash
-	hexBitcoinAddress := versionripe + addressChecksum
-
-	bigintBitcoinAddress, _ := new(big.Int).SetString((hexBitcoinAddress), 16) // Base58Encode the Address
-	base58BitcoinAddress := base58.Encode(bigintBitcoinAddress.Bytes())
-	return Wallet{base58BitcoinAddress: "1" + base58BitcoinAddress, RIPEM160: versionripeNormal, privateKey: privateKey, passphrase: passphrase} // Send line to output channel
+	// base58BitcoinAddress := "1" + base58.Encode(bigintBitcoinAddress.Bytes())
+	// fmt.Println("base58BitcoinAddress:", base58BitcoinAddress)
+	return Wallet{addressUncompressed: uaddr.EncodeAddress(), addressCompressed: caddr.EncodeAddress(), passphrase: passphrase} // Send line to output channel
 }
 
 // func Generator(passphrase string) Wallet {
@@ -334,7 +374,7 @@ func SaveWallet(walletInfo Wallet) {
 		log.Println(err)
 	}
 	defer f.Close()
-	if _, err := f.WriteString(fullWallet.base58BitcoinAddress + ":" + fullWallet.passphrase + ":" + fullWallet.privateKey + ":" + fullWallet.RIPEM160 + "\n"); err != nil {
+	if _, err := f.WriteString(fullWallet.addressUncompressed + ":" + fullWallet.addressCompressed + ":" + fullWallet.passphrase + "\n"); err != nil {
 		log.Println(err)
 	}
 }
