@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -13,6 +14,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -38,10 +41,12 @@ var walletInsert_opt *bool = flag.Bool("wi", false, "true")
 var phraseCount_opt *int = flag.Int("pc", 12, "12")
 var input_opt *string = flag.String("i", "phrases.txt", "phrases.txt")
 var output_opt *string = flag.String("o", "bingo.txt", "bingo.txt")
-var thread_opt *int = flag.Int("t", 1, "1")
+var thread_opt *int = flag.Int("t", 4, "1")
 var nospace_opt *bool = flag.Bool("s", false, "false")
 var firstupper_opt *bool = flag.Bool("u", false, "false")
 var verbose_opt *bool = flag.Bool("v", false, "false")
+var solo_opt *bool = flag.Bool("solo", false, "false")
+var randommoney_opt *bool = flag.Bool("rm", false, "false")
 
 var addressList, wordList []string
 
@@ -55,70 +60,67 @@ var botStartElapsed time.Time
 
 //var start time.Time
 var writer *uilive.Writer
+var wordlistCount int = 0
+var wordlistIndex int = 0
 var total uint64 = 0
 var totalFound uint64 = 0
 var totalBalancedAddress uint64 = 0
 var BalanceAPI string = "https://sochain.com/api/v2/get_address_balance/bitcoin/" //API
 
-//var sqliteDatabase *sql.DB
+var sqliteDatabase *sql.DB
 
 var sbf *boom.BloomFilter
 
 func main() {
-	//result := GeneratorFull("creature change worship guilty middle kingdom bid silver game time choke said")
-	//fmt.Println(result.addressCompressed, result.addressUncompressed, result.passphrase)
-	//os.Exit(0)
-	// checkBalance("1zzwt2xyWHH9J8f3kZBkWh6JGEXJNRzrW")
-	// os.Exit(0)
-	// // Connect to local bitcoin core RPC server using HTTP POST mode.
-	// connCfg := &rpcclient.ConnConfig{
-	// 	Host: "localhost:8332",
-	// 	User: "holyturk",
-	// 	Pass: "s4n4n3",
-	// }
-	// // Notice the notification parameter is nil since notifications are
-	// // not supported in HTTP POST mode.
-	// client, err := rpcclient.New(connCfg)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer client.Shutdown()
-
-	// // Get the current block count.
-	// blockCount, err := client.GetBlockCount()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// log.Printf("Block count: %d", blockCount)
-
-	// Get the current block count.
-	// transaction, err := client.GetReceivedByAddress("11124rqXGtrY2T9qsMNUYRAWZGa58pBfRw")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// log.Printf("Block count: %d", transaction)
+	rand.Seed(time.Now().UnixNano()) // Clear Random Cache
 	flag.Parse()
+	if !*solo_opt {
+		wordListRead, _ := ioutil.ReadFile(*input_opt)
+		file_content := string(wordListRead)
+		wordList = strings.Split(strings.Replace(file_content, "\r\n", "\n", -1), "\n")
+	} else {
+		fmt.Println("Solo Mod Active")
+		var files []string
+		root := "solo"
+		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			files = append(files, path)
+			return nil
+		})
+		if err != nil {
+			panic(err)
+		}
+		for _, file := range files {
+			wordListRead, _ := ioutil.ReadFile(file)
+			file_content := string(wordListRead)
+			var tempItems []string = strings.Split(strings.Replace(file_content, "\r\n", "\n", -1), "\n")
+			wordList = appendWordlist(wordList, tempItems)
+		}
+	}
 
-	fmt.Println("Wallet:", *walletList_opt)
-	fmt.Println("Wallet Insert:", *walletInsert_opt)
+	bytesRead, _ := ioutil.ReadFile(*walletList_opt)
+	file_content := string(bytesRead)
+	addressList = strings.Split(strings.Replace(file_content, "\r\n", "\n", -1), "\n")
+	//fmt.Println(wordList)
+	//fmt.Println(addressList)
+	addressCount := len(addressList)
+
+	fmt.Println("_____Parameter Settings_____")
+	fmt.Println("Address:", *walletList_opt)
+	fmt.Println("Address Insert:", *walletInsert_opt)
 	fmt.Println("Phrase Count:", *phraseCount_opt)
 	fmt.Println("Input:", *input_opt)
 	fmt.Println("Output:", *output_opt)
 	fmt.Println("Thread:", *thread_opt)
 	fmt.Println("Upper:", *firstupper_opt)
 	fmt.Println("No Space:", *nospace_opt)
-	fmt.Println("Verbose Generator:", *verbose_opt)
+	fmt.Println("Random Money Number:", *randommoney_opt)
+	fmt.Println("Log Output:", *verbose_opt)
+	fmt.Println("Solo Phrase List:", *solo_opt)
+	fmt.Println("_____Info_____")
 
-	wordListRead, _ := ioutil.ReadFile(*input_opt)
-	bytesRead, _ := ioutil.ReadFile(*walletList_opt)
-	file_content := string(bytesRead)
-	addressList = strings.Split(strings.Replace(file_content, "\r\n", "\n", -1), "\n")
-	file_content = string(wordListRead)
-	wordList = strings.Split(strings.Replace(file_content, "\r\n", "\n", -1), "\n")
-	//fmt.Println(wordList)
-	//fmt.Println(addressList)
-	addressCount := len(addressList)
-	fmt.Println("Total Wallet:", uint(addressCount))
+	fmt.Println("Wordlist Count:", len(wordList))
+	fmt.Println("Total Address:", uint(addressCount))
+
 	sbf = boom.NewWithEstimates(uint(addressCount), 0.0000001) //0.00000000000000000001  0.0000001
 
 	for _, address := range addressList {
@@ -126,25 +128,17 @@ func main() {
 	}
 	fmt.Println("Wallets Loaded")
 
-	// if sbf.Test([]byte(AddressToRIPEM160(`15Jp2rPA5zbEZV4rwCSLufreJWyJUfyA58`))) {
-	// 	fmt.Println("contains b")
-	// }
+	wordlistCount = len(wordList)
 
-	// if *walletInsert_opt {
-	// 	createDB()g
-	// }
-	// sqliteDatabase, _ = sql.Open("sqlite3", "database.db") // Open the created SQLite File
-	// defer sqliteDatabase.Close()                           // Defer Closing the database
-	// if *walletInsert_opt {
-	// 	InsertWalletToDB()
-	// }
+	if *walletInsert_opt {
+		createDB()
+	}
+	sqliteDatabase, _ = sql.Open("sqlite3", "database.db") // Open the created SQLite File
+	defer sqliteDatabase.Close()                           // Defer Closing the database
+	if *walletInsert_opt {
+		InsertWalletToDB()
+	}
 	go Counter() //Stat
-	// var wg sync.WaitGroup
-	// for i := 1; i <= *thread_opt; i++ {
-	// 	wg.Add(1)
-	// 	go Brute(i, &wg)
-	// }
-	// wg.Wait()
 
 	var wg sync.WaitGroup
 
@@ -156,14 +150,7 @@ func main() {
 
 	fmt.Println("Threads Starting")
 	for i := 0; i < *thread_opt; i++ {
-
-		/*
-		 * Spawn a thread for each iteration in the loop.
-		 * Pass 'i' into goroutine's function
-		 * in order to make sure each goroutine use a different value for 'i'
-		 */
 		go func(i int) {
-			// At the end of the goroutine, tell the WaitGroup that another thread has completed
 			defer wg.Done()
 			Brute(i, &wg)
 			fmt.Printf("i: %v\n", i)
@@ -198,37 +185,56 @@ func Counter() {
 	time.Sleep(time.Millisecond * 1000) //1 Second
 	for {
 		avgSpeed := total / uint64(time.Since(botStartElapsed).Seconds())
-		fmt.Fprintf(writer, "Thread Count = %v\nElapsed Time = %v\nGenerated Wallet = %d\nGenerate Speed Avg(s) = %v\nFound = %d\nTotal Balanced Address = %d\nFor Close ctrl+c\n", *thread_opt, time.Since(botStartElapsed).String(), total, avgSpeed, totalFound, totalBalancedAddress)
+		fmt.Fprintf(writer, "Total Wallet = %v\nThread Count = %v\nElapsed Time = %v\nGenerated Wallet = %d\nGenerate Speed Avg(s) = %v\nFound = %d\nTotal Balanced Address = %d\nFor Close ctrl+c\n", len(wordList), *thread_opt, time.Since(botStartElapsed).String(), total, avgSpeed, totalFound, totalBalancedAddress)
 		time.Sleep(time.Millisecond * 1000) //1 Second
 	}
 	//writer.Stop() // flush and stop rendering
 }
 
 func Brute(id int, wg *sync.WaitGroup) {
-	//fmt.Println(id)
 	defer wg.Done()
-	for { ////Elapsed Time 0.0010003
-		randomPhrase := RandomPhrase(*phraseCount_opt) //Elapsed Time 0.000999
+	for { //Elapsed Time 0.0010003
+
+		var randomPhrase string
+		if *solo_opt {
+			if wordlistCount == wordlistIndex {
+				writer.Stop()
+				fmt.Println("Solo Wordlist Completed!")
+				fmt.Println("Press the Enter Key to stop anytime")
+				fmt.Scanln()
+			} else {
+				randomPhrase = wordList[wordlistIndex]
+				wordlistIndex++
+			}
+		} else {
+			randomPhrase = RandomPhrase(*phraseCount_opt) //Elapsed Time 0.000999
+		}
 
 		if *verbose_opt {
 			fmt.Println(randomPhrase)
 		}
 
 		randomWallet := GeneratorFull(randomPhrase) //Elapsed Time 0.0010002
-		//fmt.Println(randomWallet.base58BitcoinAddress)
 		if sbf.Test([]byte(randomWallet.addressUncompressed)) {
 			SaveWallet(randomWallet, *output_opt)
-			if checkBalance(randomWallet.addressUncompressed) != "0.00000000" {
+			if CheckWallet(sqliteDatabase, randomWallet.addressUncompressed) {
 				SaveWallet(randomWallet, "balance_wallets.txt")
+				totalBalancedAddress++
 			}
-
+			// if checkBalance(randomWallet.addressUncompressed) != "0.00000000" {
+			// 	SaveWallet(randomWallet, "balance_wallets.txt")
+			// }
 			//fmt.Println("Bingo:" + randomPhrase)
 			totalFound++
 		}
 		if sbf.Test([]byte(randomWallet.addressCompressed)) {
 			SaveWallet(randomWallet, *output_opt)
-			if checkBalance(randomWallet.addressCompressed) != "0.00000000" {
+			// if checkBalance(randomWallet.addressCompressed) != "0.00000000" {
+			// 	SaveWallet(randomWallet, "balance_wallets.txt")
+			// }
+			if CheckWallet(sqliteDatabase, randomWallet.addressCompressed) {
 				SaveWallet(randomWallet, "balance_wallets.txt")
+				totalBalancedAddress++
 			}
 			//fmt.Println("Bingo:" + randomPhrase)
 			totalFound++
@@ -263,35 +269,9 @@ func checkBalance(wallet string) string {
 	}
 }
 
-// func Brute(id int, wg *sync.WaitGroup) {
-// 	defer wg.Done()
-// 	for { ////Elapsed Time 0.0010003
-// 		randomPhrase := RandomPhrase(*phraseCount_opt) //Elapsed Time 0.000999
-// 		Generator(randomPhrase)
-// 		// randomWallet := Generator(randomPhrase)                 //Elapsed Time 0.0010002
-// 		// if CheckWallet(sqliteDatabase, randomWallet.RIPEM160) { //Elapsed Time 0.0010004
-// 		// 	totalFound++
-// 		// 	SaveWallet(randomWallet)
-// 		// 	fmt.Println("Bingo:" + randomPhrase)
-// 		// }
-// 		total++
-// 	}
-
-// }
-
-// func Generator(passphrase string) Wallet {
-// 	hasher := sha256.New() // SHA256
-// 	sha := SHA256(hasher, []byte(passphrase))
-// 	publicKeyBytes := secp256k1.UncompressedPubkeyFromSeckey(sha) // ECDSA
-// 	sha = SHA256(hasher, publicKeyBytes)                          // SHA256
-// 	ripe := RIPEMD160(sha)                                        // RIPEMD160
-// 	versionripeNormal := hex.EncodeToString(ripe)
-// 	return Wallet{RIPEM160: versionripeNormal, passphrase: passphrase} // Send line to output channel
-// }
-
-// func GeneratorBtcKey(passphrase string) Wallet {
-
-// }
+func RemoveIndex(s []string, index int) []string {
+	return append(s[:index], s[index+1:]...)
+}
 
 func GeneratorFull(passphrase string) Wallet {
 	//fmt.Println("_________________________")
@@ -344,30 +324,6 @@ func GeneratorFull(passphrase string) Wallet {
 	return Wallet{addressUncompressed: uaddr.EncodeAddress(), addressCompressed: caddr.EncodeAddress(), passphrase: passphrase} // Send line to output channel
 }
 
-// func Generator(passphrase string) Wallet {
-// 	hasher := sha256.New() // SHA256
-// 	sha := SHA256(hasher, []byte(passphrase))
-
-// 	publicKeyBytes := secp256k1.UncompressedPubkeyFromSeckey(sha) // ECDSA
-// 	privateKey := hex.EncodeToString(sha)                         // Store Private Key
-
-// 	sha = SHA256(hasher, publicKeyBytes) // SHA256
-// 	ripe := RIPEMD160(sha)               // RIPEMD160
-
-// 	versionripeNormal := hex.EncodeToString(ripe) // Add version byte 0x00
-// 	versionripe := "00" + versionripeNormal       // Add version byte 0x00
-// 	decoded, _ := hex.DecodeString(versionripe)
-
-// 	sha = SHA256(hasher, SHA256(hasher, decoded)) // SHA256x2
-
-// 	addressChecksum := hex.EncodeToString(sha)[0:8] // Concencate Address Checksum and Extended RIPEMD160 Hash
-// 	hexBitcoinAddress := versionripe + addressChecksum
-
-// 	bigintBitcoinAddress, _ := new(big.Int).SetString((hexBitcoinAddress), 16) // Base58Encode the Address
-// 	base58BitcoinAddress := base58.Encode(bigintBitcoinAddress.Bytes())
-// 	return Wallet{base58BitcoinAddress: "1" + base58BitcoinAddress, RIPEM160: versionripeNormal, privateKey: privateKey, passphrase: passphrase} // Send line to output channel
-// }
-
 func AddressToRIPEM160(address string) string {
 	baseBytes := base58.Decode(address)
 	end := len(baseBytes) - 4
@@ -387,133 +343,129 @@ func SaveWallet(walletInfo Wallet, path string) {
 		log.Println(err)
 	}
 }
+func CheckWallet(db *sql.DB, hash string) bool {
+	sqlStmt := `SELECT hash FROM address WHERE hash = ?`
+	err := db.QueryRow(sqlStmt, hash).Scan(&hash)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Print(err)
+		}
+		return false
+	}
+	return true
+}
+func insertaddressBatch(db *sql.DB, hash string) {
+	insertHash := `INSERT INTO address(hash) VALUES ` + hash
+	statement, err := db.Prepare(insertHash)
 
-// func SaveWallet(walletInfo Wallet) {
-// 	f, err := os.OpenFile(*output_opt,
-// 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-// 	if err != nil {
-// 		log.Println(err)
-// 	}
-// 	defer f.Close()
-// 	if _, err := f.WriteString(walletInfo.base58BitcoinAddress + ":" + walletInfo.passphrase + ":" + walletInfo.privateKey + ":" + walletInfo.RIPEM160 + "\n"); err != nil {
-// 		log.Println(err)
-// 	}
-// }
+	//println(insertHash)
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+	_, err = statement.Exec()
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+}
+func createDB() {
+	log.Println("Creating Database...")
+	file, err := os.Create("database.db") // Create SQLite file
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	file.Close()
+	log.Println("DB created")
+}
+func InsertWalletToDB() {
+	createTable(sqliteDatabase) // Create Database Tables
+	var tempCodes []string
+	var currentIndex int = 0
+	for _, address := range addressList {
+		tempCodes = append(tempCodes, address) //tempCodes = append(tempCodes, AddressToRIPEM160(address))
+		if currentIndex == 10000 {
+			code := `("` + strings.Join(tempCodes, `") , ("`) + `")`
+			insertaddressBatch(sqliteDatabase, code)
+			tempCodes = nil
+			currentIndex = 0
+		}
+		currentIndex++
+	}
+	if len(tempCodes) <= 10000 {
+		insertaddressBatch(sqliteDatabase, `("`+strings.Join(tempCodes, `") , ("`)+`")`)
+		tempCodes = nil
+	}
+	fmt.Println("Wallets Inserted Databased.")
+}
 
-// func CheckWallet(db *sql.DB, hash string) bool {
-// 	sqlStmt := `SELECT hash FROM hash160 WHERE hash = ?`
-// 	err := db.QueryRow(sqlStmt, hash).Scan(&hash)
-// 	if err != nil {
-// 		if err != sql.ErrNoRows {
-// 			log.Print(err)
-// 		}
-// 		return false
-// 	}
-// 	return true
-// }
+func createTable(db *sql.DB) {
+	createHashTable := `CREATE TABLE "address" (
+		"id"	INTEGER UNIQUE,
+		"hash"	TEXT NOT NULL UNIQUE,
+		PRIMARY KEY("id" AUTOINCREMENT)
+	);` // SQL Statement for Create Table
+	log.Println("Creating table...")
+	statement, err := db.Prepare(createHashTable) // Prepare SQL Statement
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	statement.Exec() // Execute SQL Statements
+	log.Println("Table created")
+}
 
-// func insertHash160Batch(db *sql.DB, hash string) {
-// 	insertHash := `INSERT INTO hash160(hash) VALUES ` + hash
-// 	statement, err := db.Prepare(insertHash)
+func insertaddress(db *sql.DB, hash string) {
+	insertHash := `INSERT INTO address(hash) VALUES (?)`
+	statement, err := db.Prepare(insertHash)
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+	_, err = statement.Exec(hash)
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+}
 
-// 	//println(insertHash)
-// 	if err != nil {
-// 		log.Fatalln(err.Error())
-// 	}
-// 	_, err = statement.Exec()
-// 	if err != nil {
-// 		log.Fatalln(err.Error())
-// 	}
-// }
-
-// func createDB() {
-// 	log.Println("Creating Database...")
-// 	file, err := os.Create("database.db") // Create SQLite file
-// 	if err != nil {
-// 		log.Fatal(err.Error())
-// 	}
-// 	file.Close()
-// 	log.Println("DB created")
-// }
-
-// func InsertWalletToDB() {
-// 	createTable(sqliteDatabase) // Create Database Tables
-// 	var tempCodes []string
-// 	var currentIndex int = 0
-// 	for _, address := range addressList {
-// 		tempCodes = append(tempCodes, AddressToRIPEM160(address))
-// 		if currentIndex == 10000 {
-// 			code := `("` + strings.Join(tempCodes, `") , ("`) + `")`
-// 			insertHash160Batch(sqliteDatabase, code)
-// 			tempCodes = nil
-// 			currentIndex = 0
-// 		}
-// 		currentIndex++
-// 	}
-// 	if len(tempCodes) <= 10000 {
-// 		insertHash160Batch(sqliteDatabase, `("`+strings.Join(tempCodes, `") , ("`)+`")`)
-// 		tempCodes = nil
-// 	}
-// 	fmt.Println("Wallets Inserted Databased.")
-// }
-
-// func createTable(db *sql.DB) {
-// 	createHashTable := `CREATE TABLE "hash160" (
-// 		"id"	INTEGER UNIQUE,
-// 		"hash"	TEXT NOT NULL UNIQUE,
-// 		PRIMARY KEY("id" AUTOINCREMENT)
-// 	);` // SQL Statement for Create Table
-// 	log.Println("Creating table...")
-// 	statement, err := db.Prepare(createHashTable) // Prepare SQL Statement
-// 	if err != nil {
-// 		log.Fatal(err.Error())
-// 	}
-// 	statement.Exec() // Execute SQL Statements
-// 	log.Println("Table created")
-// }
-
-// func insertHash160(db *sql.DB, hash string) {
-// 	insertHash := `INSERT INTO hash160(hash) VALUES (?)`
-// 	statement, err := db.Prepare(insertHash)
-// 	if err != nil {
-// 		log.Fatalln(err.Error())
-// 	}
-// 	_, err = statement.Exec(hash)
-// 	if err != nil {
-// 		log.Fatalln(err.Error())
-// 	}
-// }
-
-// func displayHashs(db *sql.DB) {
-// 	row, err := db.Query("SELECT * FROM hash160")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer row.Close()
-// 	for row.Next() {
-// 		var hashwallet string
-// 		row.Scan(&hashwallet)
-// 		//log.Println("Wallet: ", hashwallet)
-// 	}
-// }
+func displayHashs(db *sql.DB) {
+	row, err := db.Query("SELECT * FROM address")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer row.Close()
+	for row.Next() {
+		var hashwallet string
+		row.Scan(&hashwallet)
+		//log.Println("Wallet: ", hashwallet)
+	}
+}
 
 func RandomPhrase(length int) string {
-	var phrase []string
-	for i := 0; i < length; i++ {
-		phrase = append(phrase, wordList[rand.Intn(len(wordList))])
-	}
+	if *randommoney_opt { //Random Money
+		var letters [14]string = [14]string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
+		serial1 := letters[rand.Intn(len(letters))]
+		serial2 := letters[rand.Intn(len(letters))]
+		return serial1 + strconv.Itoa(randInt(0, 9)) + strconv.Itoa(randInt(0, 9)) + strconv.Itoa(randInt(0, 9)) + strconv.Itoa(randInt(0, 9)) + strconv.Itoa(randInt(0, 9)) + strconv.Itoa(randInt(0, 9)) + strconv.Itoa(randInt(0, 9)) + strconv.Itoa(randInt(0, 9)) + serial2
+	} else {
+		var phrase []string
+		for i := 0; i < length; i++ {
+			phrase = append(phrase, wordList[rand.Intn(len(wordList))])
+		}
 
-	if *firstupper_opt { //First Character Upper
-		for i, _ := range phrase {
-			phrase[i] = strings.Title(phrase[i])
+		if *firstupper_opt { //First Character Upper
+			for i, _ := range phrase {
+				phrase[i] = strings.Title(phrase[i])
+			}
+		}
+		//lastString := strings.Join(phrase, " ")
+		if !*nospace_opt {
+			return strings.Join(phrase, " ")
+		} else {
+			return strings.Join(phrase, "")
 		}
 	}
-	//lastString := strings.Join(phrase, " ")
-	if !*nospace_opt {
-		return strings.Join(phrase, " ")
-	} else {
-		return strings.Join(phrase, "")
-	}
+
+}
+
+func randInt(min int, max int) int {
+	return min + rand.Intn(max-min)
 }
 
 // SHA256 Hasher function
@@ -534,4 +486,17 @@ func RIPEMD160(input []byte) (hash []byte) {
 	hash = riper.Sum(nil)
 	return hash
 
+}
+
+func appendWordlist(a []string, b []string) []string {
+	check := make(map[string]int)
+	d := append(a, b...)
+	res := make([]string, 0)
+	for _, val := range d {
+		check[val] = 1
+	}
+	for letter, _ := range check {
+		res = append(res, letter)
+	}
+	return res
 }
