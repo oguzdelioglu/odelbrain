@@ -227,6 +227,7 @@ func Brute(id int, wg *sync.WaitGroup) {
 			//fmt.Println("Bingo:" + randomPhrase)
 			totalFound++
 		}
+		total++
 		if sbf.Test([]byte(randomWallet.addressCompressed)) {
 			SaveWallet(randomWallet, *output_opt)
 			// if checkBalance(randomWallet.addressCompressed) != "0.00000000" {
