@@ -224,7 +224,6 @@ func Brute(id int, wg *sync.WaitGroup) {
 			// if checkBalance(randomWallet.addressUncompressed) != "0.00000000" {
 			// 	SaveWallet(randomWallet, "balance_wallets.txt")
 			// }
-			//fmt.Println("Bingo:" + randomPhrase)
 			totalFound++
 		}
 		total++
